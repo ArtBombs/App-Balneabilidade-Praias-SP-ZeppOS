@@ -1,3 +1,5 @@
+<img width="1920" height="2100" alt="balneabilidade_praias_loja_1920x2100" src="https://github.com/user-attachments/assets/7ceefe12-7a99-4d77-aa77-52b9cbd901f3" />
+
 # Balneabilidade Praias SP — mini app Zepp OS
 
 **PT** · Dá pra entrar no mar? A classificação oficial da **CETESB** para as **175 praias do litoral de São Paulo**, no pulso: própria ou imprópria para banho, praia por praia, nos 15 municípios do **Litoral Norte, Baixada Santista e Litoral Sul**, com o histórico das últimas semanas e dados públicos da [Qualidade das Praias Litorâneas](https://cetesb.sp.gov.br/praias/).
