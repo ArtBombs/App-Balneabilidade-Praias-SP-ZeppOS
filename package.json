@@ -1,0 +1,11 @@
+{
+  "name": "balneabilidade-praias-sp",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Zepp OS mini app - CETESB bathing water ratings for the beaches of the Sao Paulo coast / balneabilidade das praias do litoral de SP",
+  "devDependencies": {
+    "@zeppos/device-types": "^4.0.0",
+    "@zeppos/zml": "^0.0.43",
+    "esbuild": "^0.28.2"
+  }
+}
