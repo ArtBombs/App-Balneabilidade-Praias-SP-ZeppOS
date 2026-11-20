@@ -4,9 +4,9 @@ import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
 import { montarPayload, partirNome } from '../shared/praias.js'
-import { respAtual, respHist } from './fixture.mjs'
+import { respPraias, respMuns, respHist } from './fixture.mjs'
 
-const payload = (mun) => montarPayload(mun, respAtual(), respHist(mun))
+const payload = (mun) => montarPayload(mun, respPraias(mun), respMuns(), respHist(mun))
 for (const m of ['701', '283', '767']) {
   const p = payload(m)
   console.log(`payload ${p.nome}: ${JSON.stringify(p).length} B | ${p.pts.filter((x) => x.k === 'P').length}/${p.pts.length} | ${p.pts.slice(0, 2).map((x) => x.n + (x.l ? ' / ' + x.l : '') + ' ' + x.h.join('')).join(' ; ')}`)

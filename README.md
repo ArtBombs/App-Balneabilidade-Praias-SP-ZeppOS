@@ -43,7 +43,8 @@ Relógio (page)  ──BLE──►  Zepp App (app-side)  ──HTTPS──►  
 
 - O relógio não acessa a internet: quem consulta a CETESB é o **side service** dentro do Zepp App (`app-side/index.js`), via [ZML](https://github.com/zepp-health/zml).
 - Ao abrir, o app mostra na hora o último pacote salvo do município e depois busca o novo. Sem conexão, fica o último salvo, marcado como offline.
-- A cada consulta o side service baixa o retrato das 175 praias (~36 KB, dá o placar de todos os municípios) e o histórico só do município escolhido, e manda ao relógio um pacote compacto: ~3,6 KB para Ubatuba (35 praias), ~1,1 KB para Cubatão. Se o histórico falhar, o app segue sem os quadradinhos.
+- A cada consulta o side service faz 3 pedidos pequenos: as praias do município escolhido (~6 KB em Ubatuba), o placar de todos os municípios já agrupado pelo servidor (~2,5 KB) e o histórico do município (~15 KB). Só o primeiro é obrigatório; cada um tenta de novo uma vez. O relógio recebe um pacote compacto: ~3,6 KB para Ubatuba (35 praias), ~1,1 KB para Cubatão.
+- Até a v1.0.0 o app baixava as 175 praias numa resposta só (~45 KB) e o fetch do Zepp App falhava com "network error". Se ainda falhar, o rodapé mostra a etapa: **P** (praias), **M** (municípios) ou **H** (histórico).
 
 ## Estrutura
 
@@ -63,9 +64,12 @@ Relógio (page)  ──BLE──►  Zepp App (app-side)  ──HTTPS──►  
 | `Hosted/Praias_Amostragem/FeatureServer/4` ("Praias_Coletas") | Histórico semanal por praia desde 29/10/2023 |
 
 ```
-https://arcgis.cetesb.sp.gov.br/server/rest/services/Hosted/Praias/FeatureServer/0/query
-  ?f=json&where=1=1&returnGeometry=false&orderByFields=ordem
-  &outFields=ordem,ugrhi,id_municipio,municipio,id_praia,praia,qualidade,classificacao_texto,data_amostra_final,data_atual
+# praias de um município
+.../Hosted/Praias/FeatureServer/0/query?f=json&returnGeometry=false&orderByFields=ordem
+  &outFields=ordem,id_praia,praia,qualidade,classificacao_texto,data_amostra_final&where=id_municipio='701'
+# placar por município (agrupado no servidor)
+.../Hosted/Praias/FeatureServer/0/query?f=json&where=1=1&groupByFieldsForStatistics=id_municipio,municipio,ugrhi
+  &outStatistics=[count(id_praia) t, sum(qualidade) p, min(ordem) o]
 ```
 
 - `qualidade`: 1 = própria, 0 = imprópria. `ordem` dá a sequência norte → sul (as praias da Ilha Anchieta vêm sem `ordem` e ficam no fim de Ubatuba).

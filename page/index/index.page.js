@@ -31,7 +31,7 @@ const C = {
 const SCREEN = 480
 const POR_TELA = 5
 const TELAS_LISTA_MAX = Math.ceil(MAX_PONTOS / POR_TELA) // 7 (Ubatuba)
-const VERSAO_RESERVA = '1.0.0' // se getPackageInfo não existir no firmware
+const VERSAO_RESERVA = '1.0.1' // se getPackageInfo não existir no firmware
 const BRILHO_MS = 30000
 const VELHO_DIAS = 10 // boletim semanal: passou disso = data em amarelo
 const K_MUN = 'praias_municipio'
@@ -580,7 +580,7 @@ Page(
           const c = this.state.cache
           const msg = String((e && e.message) || e || '')
           const ui = this.state.ui
-          if (ui.status) ui.status.setProperty(prop.TEXT, c ? t('offline') + ' · CETESB ' + ddmm(c.d) : t('semConexao') + (msg ? ' · ' + msg.slice(0, 14) : ''))
+          if (ui.status) ui.status.setProperty(prop.TEXT, c ? t('offline') + ' · CETESB ' + ddmm(c.d) : t('semConexao') + (msg ? ' · ' + msg.slice(0, 22) : ''))
         })
     },
 

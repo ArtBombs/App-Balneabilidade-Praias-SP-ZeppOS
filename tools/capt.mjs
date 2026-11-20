@@ -4,9 +4,9 @@ import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
 import { montarPayload } from '../shared/praias.js'
-import { respAtual, respHist } from '../test/fixture.mjs'
+import { respPraias, respMuns, respHist } from '../test/fixture.mjs'
 
-const payload = (mun) => montarPayload(mun, respAtual(), respHist(mun))
+const payload = (mun) => montarPayload(mun, respPraias(mun), respMuns(), respHist(mun))
 const widgets = []
 const mk = (type, opts) => { const w = { type, opts: { ...opts, visible: true }, ev: {}, vivo: true, setProperty(k, v) { if (k === 'MORE') Object.assign(this.opts, v); else this.opts[k] = v }, addEventListener(e, f) { this.ev[e] = f } }; widgets.push(w); return w }
 const store = {}

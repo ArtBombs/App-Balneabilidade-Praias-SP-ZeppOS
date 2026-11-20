@@ -1,5 +1,5 @@
 // Balneabilidade das praias do litoral de SP — camadas públicas do mapa da CETESB (ArcGIS).
-// Retrato atual: Hosted/Praias/FeatureServer/0 ("Praias_v3", 175 praias, 1 linha por praia).
+// Retrato atual: Hosted/Praias/FeatureServer/0 ("Praias_v3", 175 praias, 1 linha por praia), consultado por município.
 // Histórico semanal: Hosted/Praias_Amostragem/FeatureServer/4 ("Praias_Coletas", desde 29/10/2023).
 // Verificado em 17/11/2026. qualidade: 1 = própria, 0 = imprópria.
 
@@ -10,20 +10,39 @@ export const HIST_VIS = 4 // semanas anteriores mostradas por praia
 export const MAX_PONTOS = 35 // Ubatuba tem 35 praias (7 telas de 5)
 export const MUN_PADRAO = '701' // Ubatuba (1º município de norte a sul)
 
-const CAMPOS_ATUAL = 'ordem,ugrhi,id_municipio,municipio,id_praia,praia,qualidade,classificacao_texto,data_amostra_final,data_atual'
+// v1.0.1: a consulta única das 175 praias (~45 KB) falhava no fetch do Zepp App ("network error").
+// Agora são 3 respostas pequenas: praias do município (~6 KB), placar por município (~3 KB) e histórico.
+const CAMPOS_PRAIAS = 'ordem,id_praia,praia,qualidade,classificacao_texto,data_amostra_final'
+const ESTAT = [
+  { statisticType: 'count', onStatisticField: 'id_praia', outStatisticFieldName: 't' },
+  { statisticType: 'sum', onStatisticField: 'qualidade', outStatisticFieldName: 'p' },
+  { statisticType: 'min', onStatisticField: 'ordem', outStatisticFieldName: 'o' },
+]
+const soDig = (m) => String(m).replace(/\D/g, '')
 
-export function urlAtual() {
-  return URL_ATUAL + '?f=json&where=1%3D1&returnGeometry=false&orderByFields=ordem&outFields=' + CAMPOS_ATUAL
+// Praias de um município (essencial)
+export function urlPraias(mun) {
+  return (
+    URL_ATUAL + '?f=json&returnGeometry=false&orderByFields=ordem&outFields=' + CAMPOS_PRAIAS +
+    '&where=' + encodeURIComponent("id_municipio='" + soDig(mun) + "'")
+  )
 }
 
-// Últimas semanas do município (6 por praia cobre 4 anteriores + a atual + folga para duplicatas)
+// Placar de todos os municípios (para a lista), agrupado no servidor
+export function urlMunicipios() {
+  return (
+    URL_ATUAL + '?f=json&where=1%3D1&groupByFieldsForStatistics=id_municipio,municipio,ugrhi' +
+    '&outStatistics=' + encodeURIComponent(JSON.stringify(ESTAT))
+  )
+}
+
+// Últimas semanas do município (5 por praia: 4 anteriores + a atual)
 export function urlHist(mun, nPraias) {
-  const where = "id_municipio='" + String(mun).replace(/\D/g, '') + "'"
   return (
     URL_HIST +
     '?f=json&returnGeometry=false&outFields=id_praia,dt_fim_amostragem,qualidade' +
-    '&orderByFields=dt_fim_amostragem%20DESC&resultRecordCount=' + Math.max(12, nPraias * 7) +
-    '&where=' + encodeURIComponent(where)
+    '&orderByFields=dt_fim_amostragem%20DESC&resultRecordCount=' + Math.max(10, nPraias * 5) +
+    '&where=' + encodeURIComponent("id_municipio='" + soDig(mun) + "'")
   )
 }
 
@@ -63,17 +82,19 @@ export function partirNome(praia) {
   return { n, l }
 }
 
-// Municípios: nome em caixa normal, na ordem norte → sul pela menor "ordem" das praias
-export function listarMunicipios(attrs) {
-  const M = {}
-  for (const a of attrs) {
-    const id = String(a.id_municipio)
-    const m = M[id] || (M[id] = { id, n: titulo(a.municipio), r: a.ugrhi || '', o: Infinity, p: 0, t: 0 })
-    if (typeof a.ordem === 'number' && a.ordem < m.o) m.o = a.ordem
-    m.t++
-    if (classe(a.qualidade, a.classificacao_texto) === 'P') m.p++
-  }
-  return Object.values(M)
+// Municípios (resposta agrupada do servidor) → [{id, n, r, p, t}] de norte a sul pela menor "ordem"
+export function listarMunicipios(feats) {
+  return (feats || [])
+    .map((f) => f.attributes || f)
+    .filter((a) => a && a.id_municipio != null)
+    .map((a) => ({
+      id: String(a.id_municipio),
+      n: titulo(a.municipio),
+      r: a.ugrhi || '',
+      p: Number(a.p) || 0,
+      t: Number(a.t) || 0,
+      o: typeof a.o === 'number' ? a.o : Infinity,
+    }))
     .sort((a, b) => a.o - b.o)
     .map(({ id, n, r, p, t }) => ({ id, n, r, p, t }))
 }
@@ -99,18 +120,19 @@ export function montarHist(feats, datasAtuais) {
   return out
 }
 
-// Retrato completo (+ histórico do município) → pacote pequeno para o relógio
-export function montarPayload(mun, bodyAtual, bodyHist) {
-  if (!bodyAtual || bodyAtual.error) throw new Error('ArcGIS: ' + ((bodyAtual && bodyAtual.error && bodyAtual.error.message) || 'resposta vazia'))
-  const attrs = (bodyAtual.features || []).map((f) => f.attributes || {})
-  if (!attrs.length) throw new Error('nenhuma praia na camada')
-  const muns = listarMunicipios(attrs)
-  const m = muns.find((x) => x.id === String(mun)) || muns.find((x) => x.id === MUN_PADRAO) || muns[0]
-
-  const daqui = attrs
-    .filter((a) => String(a.id_municipio) === m.id)
+// Praias do município (+ placar de todos + histórico, ambos opcionais) → pacote pequeno para o relógio.
+// munsReserva: lista salva antes, usada se o placar falhar.
+export function montarPayload(mun, bodyPraias, bodyMuns, bodyHist, munsReserva) {
+  if (!bodyPraias || bodyPraias.error) throw new Error('ArcGIS: ' + ((bodyPraias && bodyPraias.error && bodyPraias.error.message) || 'resposta vazia'))
+  const daqui = (bodyPraias.features || [])
+    .map((f) => f.attributes || {})
     .sort((a, b) => (a.ordem ?? 1e9) - (b.ordem ?? 1e9))
     .slice(0, MAX_PONTOS)
+  if (!daqui.length) throw new Error('nenhuma praia')
+  let muns = bodyMuns && !bodyMuns.error ? listarMunicipios(bodyMuns.features) : []
+  if (!muns.length && Array.isArray(munsReserva)) muns = munsReserva
+  const m = muns.find((x) => x.id === String(mun)) || { id: String(mun), n: '', r: '' }
+
   const datasAtuais = {}
   for (const a of daqui) datasAtuais[a.id_praia] = dia(a.data_amostra_final)
   const hist = bodyHist && !bodyHist.error ? montarHist(bodyHist.features, datasAtuais) : {}

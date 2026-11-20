@@ -1,7 +1,8 @@
 import { BaseSideService } from '@zeppos/zml/base-side'
-import { MUN_PADRAO, urlAtual, urlHist, montarPayload } from '../shared/praias'
+import { MUN_PADRAO, urlPraias, urlMunicipios, urlHist, montarPayload } from '../shared/praias'
 
 const K_CACHE = (m) => 'praias_payload_' + m
+const K_MUNS = 'praias_municipios'
 
 function lerStore(k) {
   try {
@@ -18,22 +19,44 @@ function gravarStore(k, v) {
   } catch (e) {}
 }
 
+const esperar = (ms) => new Promise((ok) => setTimeout(ok, ms))
+const msgErro = (e) => String((e && (e.message || e.msg || (e.code != null && 'code ' + e.code))) || e || 'erro')
+
 async function getJSON(url) {
   const res = await fetch({ url, method: 'GET', headers: { Accept: 'application/json' } })
   if (res.status && res.status !== 200) throw new Error('HTTP ' + res.status)
   return typeof res.body === 'string' ? JSON.parse(res.body) : res.body
 }
 
+// Uma nova tentativa depois de 1,5 s (o fetch do Zepp App às vezes falha na 1ª)
+async function getJSON2(url, etapa) {
+  try {
+    return await getJSON(url)
+  } catch (e) {
+    await esperar(1500)
+    try {
+      return await getJSON(url)
+    } catch (e2) {
+      throw new Error(etapa + ' ' + msgErro(e2))
+    }
+  }
+}
+
 async function buscar(mun) {
-  // 1) retrato das 175 praias (~36 KB): placar de todos os municípios + praias deste
-  const atual = await getJSON(urlAtual())
-  const n = (atual.features || []).filter((f) => String(f.attributes && f.attributes.id_municipio) === String(mun)).length
-  // 2) histórico só deste município; se falhar, segue sem os quadradinhos
+  // 1) praias do município (~6 KB em Ubatuba): essencial
+  const praias = await getJSON2(urlPraias(mun), 'P')
+  const n = (praias && praias.features && praias.features.length) || 10
+  // 2) placar de todos os municípios (~3 KB) e 3) histórico: opcionais
+  let muns = null
+  try {
+    muns = await getJSON2(urlMunicipios(), 'M')
+  } catch (e) {}
   let hist = null
   try {
-    hist = await getJSON(urlHist(mun, n || 10))
+    hist = await getJSON2(urlHist(mun, n), 'H')
   } catch (e) {}
-  const payload = montarPayload(mun, atual, hist)
+  const payload = montarPayload(mun, praias, muns, hist, lerStore(K_MUNS))
+  if (payload.muns && payload.muns.length) gravarStore(K_MUNS, payload.muns)
   gravarStore(K_CACHE(payload.mun), payload)
   return payload
 }
@@ -52,10 +75,10 @@ AppSideService(
       buscar(mun)
         .then((payload) => res(null, { ok: true, payload }))
         .catch((err) => {
-          this.error('falha CETESB:', err && err.message)
+          this.error('falha CETESB:', msgErro(err))
           const cache = lerStore(K_CACHE(mun))
           if (cache) res(null, { ok: true, stale: true, payload: cache })
-          else res(null, { ok: false, mun, error: String((err && err.message) || err) })
+          else res(null, { ok: false, mun, error: msgErro(err) })
         })
     },
   }),
